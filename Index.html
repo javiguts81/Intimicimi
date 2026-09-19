@@ -1,0 +1,343 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Conexión Íntima</title>
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Íntima">
+    
+    <!-- Manifest en línea para instalación móvil -->
+    <link rel="manifest" href='data:application/json,{"name":"Conexión Íntima","short_name":"Íntima","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://fav.farm/🔥","sizes":"192x192","type":"image/png"}]}'>
+
+    <!-- Cliente SDK de Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-green: #10b981;
+            --primary: #8b5cf6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 16px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 420px;
+            background-color: var(--card-bg);
+            border-radius: 28px;
+            padding: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(to right, #ec4899, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .user-switch {
+            display: flex;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px;
+            border-radius: 12px;
+        }
+
+        .user-tab {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            background: none;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .user-tab.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: var(--text-main);
+        }
+
+        .partner-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 18px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .partner-card h2 {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 8px;
+        }
+
+        .status-badge.red { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .status-badge.yellow { background: rgba(245, 158, 11, 0.15); color: var(--accent-yellow); border: 1px solid rgba(245, 158, 11, 0.3); }
+        .status-badge.green { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); border: 1px solid rgba(16, 185, 129, 0.3); }
+
+        .partner-details {
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .traffic-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid transparent;
+            border-radius: 14px;
+            padding: 12px 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            color: var(--text-main);
+        }
+
+        .traffic-btn .dot { width: 14px; height: 14px; border-radius: 50%; }
+        .traffic-btn.red .dot { background: var(--accent-red); }
+        .traffic-btn.yellow .dot { background: var(--accent-yellow); }
+        .traffic-btn.green .dot { background: var(--accent-green); }
+
+        .traffic-btn.selected.red { border-color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
+        .traffic-btn.selected.yellow { border-color: var(--accent-yellow); background: rgba(245, 158, 11, 0.1); }
+        .traffic-btn.selected.green { border-color: var(--accent-green); background: rgba(16, 185, 129, 0.1); }
+
+        .choice-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 10px 6px;
+            color: var(--text-main);
+            font-size: 0.78rem;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .choice-btn.selected { background: var(--primary); border-color: var(--primary); font-weight: 600; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        .sub-panel { display: flex; flex-direction: column; gap: 14px; }
+        .sub-panel.disabled { opacity: 0.25; pointer-events: none; }
+
+        .save-btn {
+            background: linear-gradient(135deg, #8b5cf6, #ec4899);
+            color: white; border: none; border-radius: 14px;
+            padding: 14px; font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header><h1>Conexión Íntima</h1></header>
+
+    <div class="user-switch">
+        <button class="user-tab active" onclick="switchUser('me')">Mi Estado</button>
+        <button class="user-tab" onclick="switchUser('partner')">Vista Pareja</button>
+    </div>
+
+    <div class="partner-card">
+        <h2 id="partner-title">Estado de tu pareja</h2>
+        <div id="partner-status-display" class="status-badge yellow">
+            <span id="partner-status-text">Cargando...</span>
+        </div>
+        <div class="partner-details" id="partner-details-display">
+            <div><strong>¿Cuándo?:</strong> <span id="partner-when">-</span></div>
+            <div><strong>¿Qué apetece?:</strong> <span id="partner-what">-</span></div>
+        </div>
+    </div>
+
+    <div>
+        <div class="section-title">1. Tu disponibilidad</div>
+        <div class="options-grid">
+            <button class="traffic-btn red" onclick="setStatus('red')"><span class="dot"></span><span>Rojo</span></button>
+            <button class="traffic-btn yellow selected" onclick="setStatus('yellow')"><span class="dot"></span><span>Amarillo</span></button>
+            <button class="traffic-btn green" onclick="setStatus('green')"><span class="dot"></span><span>Verde</span></button>
+        </div>
+    </div>
+
+    <div id="extra-options" class="sub-panel">
+        <div>
+            <div class="section-title">2. ¿Cuándo?</div>
+            <div class="options-grid">
+                <button class="choice-btn" onclick="selectChoice('when', 'Ahora mismo', this)">⚡ Ahora</button>
+                <button class="choice-btn selected" onclick="selectChoice('when', 'En un rato', this)">⏳ En un rato</button>
+                <button class="choice-btn" onclick="selectChoice('when', 'Esta noche', this)">🌙 Esta noche</button>
+            </div>
+        </div>
+
+        <div>
+            <div class="section-title">3. ¿Qué te apetece?</div>
+            <div class="grid-2">
+                <button class="choice-btn selected" onclick="selectChoice('what', 'Besos y caricias', this)">💆 Mimos & Besos</button>
+                <button class="choice-btn" onclick="selectChoice('what', 'Sexo oral / Juegos', this)">💋 Sexo Oral</button>
+                <button class="choice-btn" onclick="selectChoice('what', 'Hacer el amor', this)">🔥 Hacer el amor</button>
+                <button class="choice-btn" onclick="selectChoice('what', 'Lo que surja', this)">🎲 Lo que surja</button>
+            </div>
+        </div>
+    </div>
+
+    <button class="save-btn" onclick="saveState()">Actualizar Mi Estado</button>
+</div>
+
+<script>
+    // Configuración de Supabase
+    const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/rest/v1/';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let stateData = {
+        me: { status: 'yellow', when: 'En un rato', what: 'Besos y caricias' },
+        partner: { status: 'green', when: 'Esta noche', what: 'Lo que surja' }
+    };
+
+    let currentUserView = 'me';
+    const statusTexts = { red: 'Sin ganas / Ahora no', yellow: 'Quizás / Convénceme', green: '¡Con muchas ganas!' };
+
+    // Cargar datos desde Supabase
+    async function loadInitialData() {
+        const { data, error } = await supabase.from('estados').select('*');
+        if (!error && data) {
+            data.forEach(item => {
+                if (stateData[item.id]) {
+                    stateData[item.id] = { status: item.status, when: item.when, what: item.what };
+                }
+            });
+            setStatus(stateData[currentUserView].status);
+            renderPartnerCard();
+        }
+    }
+
+    // Escuchar cambios en tiempo real desde Supabase
+    function subscribeToRealtime() {
+        supabase
+            .channel('public:estados')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'estados' }, payload => {
+                const updated = payload.new;
+                if (stateData[updated.id]) {
+                    stateData[updated.id] = { status: updated.status, when: updated.when, what: updated.what };
+                    renderPartnerCard();
+                }
+            })
+            .subscribe();
+    }
+
+    function setStatus(type) {
+        stateData[currentUserView].status = type;
+        document.querySelectorAll('.traffic-btn').forEach(btn => btn.classList.remove('selected'));
+        document.querySelector(`.traffic-btn.${type}`).classList.add('selected');
+        document.getElementById('extra-options').classList.toggle('disabled', type === 'red');
+    }
+
+    function selectChoice(category, value, btnElement) {
+        stateData[currentUserView][category] = value;
+        btnElement.parentElement.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+        btnElement.classList.add('selected');
+    }
+
+    // Guardar el estado actual en Supabase
+    async function saveState() {
+        const currentData = stateData[currentUserView];
+        const { error } = await supabase.from('estados').upsert({
+            id: currentUserView,
+            status: currentData.status,
+            when: currentData.when,
+            what: currentData.what,
+            updated_at: new Date()
+        });
+
+        if (error) {
+            alert('Error al guardar: ' + error.message);
+        } else {
+            renderPartnerCard();
+            alert('Estado actualizado correctamente');
+        }
+    }
+
+    function switchUser(user) {
+        currentUserView = user;
+        document.querySelectorAll('.user-tab').forEach((tab, i) => tab.classList.toggle('active', (i === 0 && user === 'me') || (i === 1 && user === 'partner')));
+        document.getElementById('partner-title').innerText = user === 'me' ? "Estado de tu pareja" : "Tu Estado (Visto por tu pareja)";
+        setStatus(stateData[currentUserView].status);
+        renderPartnerCard();
+    }
+
+    function renderPartnerCard() {
+        const otherUser = currentUserView === 'me' ? 'partner' : 'me';
+        const data = stateData[otherUser];
+        document.getElementById('partner-status-display').className = `status-badge ${data.status}`;
+        document.getElementById('partner-status-text').innerText = statusTexts[data.status] || 'Sin información';
+        const details = document.getElementById('partner-details-display');
+        details.style.display = data.status === 'red' ? 'none' : 'flex';
+        document.getElementById('partner-when').innerText = data.when || '-';
+        document.getElementById('partner-what').innerText = data.what || '-';
+    }
+
+    // Inicializar
+    loadInitialData();
+    subscribeToRealtime();
+</script>
+</body>
+</html>
