@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -243,10 +242,10 @@
 </div>
 
 <script>
-    // Configuración de Supabase
-    const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
+    const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    let supabaseClient = null;
 
     let stateData = {
         me: { status: 'yellow', when: 'En un rato', what: 'Besos y caricias' },
@@ -256,23 +255,37 @@
     let currentUserView = 'me';
     const statusTexts = { red: 'Sin ganas / Ahora no', yellow: 'Quizás / Convénceme', green: '¡Con muchas ganas!' };
 
-    // Cargar datos desde Supabase
-    async function loadInitialData() {
-        const { data, error } = await supabase.from('estados').select('*');
-        if (!error && data) {
-            data.forEach(item => {
-                if (stateData[item.id]) {
-                    stateData[item.id] = { status: item.status, when: item.when, what: item.what };
-                }
-            });
-            setStatus(stateData[currentUserView].status);
-            renderPartnerCard();
+    function initSupabase() {
+        if (window.supabase && window.supabase.createClient) {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            loadInitialData();
+            subscribeToRealtime();
+        } else {
+            setTimeout(initSupabase, 300);
         }
     }
 
-    // Escuchar cambios en tiempo real desde Supabase
+    async function loadInitialData() {
+        if (!supabaseClient) return;
+        try {
+            const { data, error } = await supabaseClient.from('estados').select('*');
+            if (!error && data && data.length > 0) {
+                data.forEach(item => {
+                    if (stateData[item.id]) {
+                        stateData[item.id] = { status: item.status, when: item.when, what: item.what };
+                    }
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        setStatus(stateData[currentUserView].status);
+        renderPartnerCard();
+    }
+
     function subscribeToRealtime() {
-        supabase
+        if (!supabaseClient) return;
+        supabaseClient
             .channel('public:estados')
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'estados' }, payload => {
                 const updated = payload.new;
@@ -287,7 +300,8 @@
     function setStatus(type) {
         stateData[currentUserView].status = type;
         document.querySelectorAll('.traffic-btn').forEach(btn => btn.classList.remove('selected'));
-        document.querySelector(`.traffic-btn.${type}`).classList.add('selected');
+        const targetBtn = document.querySelector(`.traffic-btn.${type}`);
+        if (targetBtn) targetBtn.classList.add('selected');
         document.getElementById('extra-options').classList.toggle('disabled', type === 'red');
     }
 
@@ -297,22 +311,31 @@
         btnElement.classList.add('selected');
     }
 
-    // Guardar el estado actual en Supabase
     async function saveState() {
         const currentData = stateData[currentUserView];
-        const { error } = await supabase.from('estados').upsert({
-            id: currentUserView,
-            status: currentData.status,
-            when: currentData.when,
-            what: currentData.what,
-            updated_at: new Date()
-        });
+        
+        if (!supabaseClient) {
+            alert('Conectando a la base de datos... Por favor, inténtalo de nuevo en un segundo.');
+            return;
+        }
 
-        if (error) {
-            alert('Error al guardar: ' + error.message);
-        } else {
-            renderPartnerCard();
-            alert('Estado actualizado correctamente');
+        try {
+            const { error } = await supabaseClient.from('estados').upsert({
+                id: currentUserView,
+                status: currentData.status,
+                when: currentData.when,
+                what: currentData.what,
+                updated_at: new Date().toISOString()
+            });
+
+            if (error) {
+                alert('Error al guardar: ' + error.message);
+            } else {
+                renderPartnerCard();
+                alert('¡Estado actualizado correctamente!');
+            }
+        } catch (err) {
+            alert('Error inesperado: ' + err.message);
         }
     }
 
@@ -336,8 +359,7 @@
     }
 
     // Inicializar
-    loadInitialData();
-    subscribeToRealtime();
+    window.addEventListener('DOMContentLoaded', initSupabase);
 </script>
 </body>
 </html>
