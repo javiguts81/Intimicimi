@@ -253,8 +253,10 @@
 </div>
 
 <script>
+  // Registrar Service Worker para PWA / Notificaciones
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./OneSignalSDKWorker.js').catch(e => console.log('SW Error:', e));
+    navigator.serviceWorker.register('./OneSignalSDKWorker.js')
+      .catch(e => console.log('Error registrando SW:', e));
   }
 
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
@@ -301,7 +303,6 @@
         .subscribe();
     }
 
-    // Comprobar si las notificaciones no están concedidas para mostrar la barra
     if ('Notification' in window && Notification.permission !== 'granted') {
       document.getElementById('notify-box').style.display = 'flex';
     }
@@ -316,14 +317,15 @@
       notifyButton: { enable: false }
     }).then(() => {
       OneSignal.login(miUsuario);
-    }).catch(err => console.log('OneSignal init err:', err));
+    }).catch(err => console.log('Error OneSignal init:', err));
   });
 
   function pedirNotificaciones() {
     window.OneSignalDeferred.push(function(OneSignal) {
-      OneSignal.Notifications.requestPermission().then(permission => {
-        if (permission) {
+      OneSignal.Notifications.requestPermission().then(granted => {
+        if (granted) {
           document.getElementById('notify-box').style.display = 'none';
+          OneSignal.login(miUsuario);
         }
       });
     });
@@ -392,9 +394,7 @@
   function setUIState(saving) {
     isSaving = saving;
     const btnSave = document.getElementById('btn-save');
-    const allButtons = document.querySelectorAll('button');
-
-    allButtons.forEach(btn => btn.disabled = saving);
+    document.querySelectorAll('button').forEach(btn => btn.disabled = saving);
 
     if (saving) {
       btnSave.innerText = "Guardando...";
