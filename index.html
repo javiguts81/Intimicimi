@@ -242,124 +242,67 @@
 </div>
 
 <script>
-    const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
-    
-    let supabaseClient = null;
+  // 1. Inicializar Supabase (mantén tus claves actuales)
+  const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
+  const SUPABASE_KEY = 'TU-ANON-KEY';
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    let stateData = {
-        me: { status: 'yellow', when: 'En un rato', what: 'Besos y caricias' },
-        partner: { status: 'green', when: 'Esta noche', what: 'Lo que surja' }
-    };
+  // 2. DETECTAR QUIÉN ABRE LA APP DESDE LA URL (?user=me O ?user=partner)
+  const urlParams = new URLSearchParams(window.location.search);
+  const miUsuario = urlParams.get('user') || 'me'; // Por defecto será 'me'
+  const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
-    let currentUserView = 'me';
-    const statusTexts = { red: 'Sin ganas / Ahora no', yellow: 'Quizás / Convénceme', green: '¡Con muchas ganas!' };
+  // 3. FUNCIÓN PARA CARGAR LOS ESTADOS EN LA PANTALLA
+  async function cargarEstados() {
+    // Cargar MI estado
+    const { data: miEstado } = await supabase
+      .from('estados')
+      .select('*')
+      .eq('id', miUsuario)
+      .single();
 
-    function initSupabase() {
-        if (window.supabase && window.supabase.createClient) {
-            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            loadInitialData();
-            subscribeToRealtime();
-        } else {
-            setTimeout(initSupabase, 300);
-        }
+    // Cargar el ESTADO DE MI PAREJA
+    const { data: estadoPareja } = await supabase
+      .from('estados')
+      .select('*')
+      .eq('id', usuarioPareja)
+      .single();
+
+    if (estadoPareja) {
+      // Actualizar el texto que se ve en la sección "ESTADO DE TU PAREJA"
+      document.getElementById('estado-pareja-ganas').innerText = estadoPareja.status || 'Sin datos';
+      document.getElementById('estado-pareja-cuando').innerText = estadoPareja.when || 'Sin datos';
+      document.getElementById('estado-pareja-apetece').innerText = estadoPareja.what || 'Sin datos';
     }
+  }
 
-    async function loadInitialData() {
-        if (!supabaseClient) return;
-        try {
-            const { data, error } = await supabaseClient.from('estados').select('*');
-            if (!error && data && data.length > 0) {
-                data.forEach(item => {
-                    if (stateData[item.id]) {
-                        stateData[item.id] = { status: item.status, when: item.when, what: item.what };
-                    }
-                });
-            }
-        } catch (e) {
-            console.error(e);
-        }
-        setStatus(stateData[currentUserView].status);
-        renderPartnerCard();
+  // 4. FUNCIÓN PARA GUARDAR AL PULSAR EL BOTÓN "Actualizar Mi Estado"
+  async function actualizarMiEstado() {
+    // Lee los valores que hayas seleccionado en los botones del formulario
+    const statusSeleccionado = obtenerGanasSeleccionadas(); // adapta según tus funciones o variables
+    const cuandoSeleccionado = obtenerCuandoSeleccionado();
+    const apeteceSeleccionado = obtenerApeteceSeleccionado();
+
+    const { data, error } = await supabase
+      .from('estados')
+      .upsert({
+        id: miUsuario, // Guarda exactamente en la fila 'me' o 'partner'
+        status: statusSeleccionado,
+        when: cuandoSeleccionado,
+        what: apeteceSeleccionado
+      }, { onConflict: 'id' });
+
+    if (error) {
+      alert("Error al guardar: " + error.message);
+    } else {
+      alert("¡Estado actualizado!");
+      cargarEstados(); // Recargar datos de la pantalla
     }
+  }
 
-    function subscribeToRealtime() {
-        if (!supabaseClient) return;
-        supabaseClient
-            .channel('public:estados')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'estados' }, payload => {
-                const updated = payload.new;
-                if (stateData[updated.id]) {
-                    stateData[updated.id] = { status: updated.status, when: updated.when, what: updated.what };
-                    renderPartnerCard();
-                }
-            })
-            .subscribe();
-    }
-
-    function setStatus(type) {
-        stateData[currentUserView].status = type;
-        document.querySelectorAll('.traffic-btn').forEach(btn => btn.classList.remove('selected'));
-        const targetBtn = document.querySelector(`.traffic-btn.${type}`);
-        if (targetBtn) targetBtn.classList.add('selected');
-        document.getElementById('extra-options').classList.toggle('disabled', type === 'red');
-    }
-
-    function selectChoice(category, value, btnElement) {
-        stateData[currentUserView][category] = value;
-        btnElement.parentElement.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
-        btnElement.classList.add('selected');
-    }
-
-    async function saveState() {
-        const currentData = stateData[currentUserView];
-        
-        if (!supabaseClient) {
-            alert('Conectando a la base de datos... Por favor, inténtalo de nuevo en un segundo.');
-            return;
-        }
-
-        try {
-            const { error } = await supabaseClient.from('estados').upsert({
-                id: currentUserView,
-                status: currentData.status,
-                when: currentData.when,
-                what: currentData.what,
-                updated_at: new Date().toISOString()
-            });
-
-            if (error) {
-                alert('Error al guardar: ' + error.message);
-            } else {
-                renderPartnerCard();
-                alert('¡Estado actualizado correctamente!');
-            }
-        } catch (err) {
-            alert('Error inesperado: ' + err.message);
-        }
-    }
-
-    function switchUser(user) {
-        currentUserView = user;
-        document.querySelectorAll('.user-tab').forEach((tab, i) => tab.classList.toggle('active', (i === 0 && user === 'me') || (i === 1 && user === 'partner')));
-        document.getElementById('partner-title').innerText = user === 'me' ? "Estado de tu pareja" : "Tu Estado (Visto por tu pareja)";
-        setStatus(stateData[currentUserView].status);
-        renderPartnerCard();
-    }
-
-    function renderPartnerCard() {
-        const otherUser = currentUserView === 'me' ? 'partner' : 'me';
-        const data = stateData[otherUser];
-        document.getElementById('partner-status-display').className = `status-badge ${data.status}`;
-        document.getElementById('partner-status-text').innerText = statusTexts[data.status] || 'Sin información';
-        const details = document.getElementById('partner-details-display');
-        details.style.display = data.status === 'red' ? 'none' : 'flex';
-        document.getElementById('partner-when').innerText = data.when || '-';
-        document.getElementById('partner-what').innerText = data.what || '-';
-    }
-
-    // Inicializar
-    window.addEventListener('DOMContentLoaded', initSupabase);
+  // Cargar datos automáticamente al abrir la página
+  window.onload = cargarEstados;
 </script>
+
 </body>
 </html>
