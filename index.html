@@ -9,11 +9,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Íntima">
     
-    <!-- Manifest en línea -->
+    <!-- Manifest PWA -->
     <link rel="manifest" href='data:application/json,{"name":"Conexión Íntima","short_name":"Íntima","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://fav.farm/🔥","sizes":"192x192","type":"image/png"}]}'>
 
-    <!-- Cliente SDK de Supabase -->
+    <!-- SDK Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SDK OneSignal -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 
     <style>
         :root {
@@ -213,8 +215,15 @@
 </div>
 
 <script>
+  // Configuración de Supabase
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
+  
+  // CONFIGURACIÓN DE ONESIGNAL
+  const ONESIGNAL_APP_ID = 'e3dee093-28ed-432c-9c6a-ea0e784ea905';
+  const ONESIGNAL_REST_KEY = 'os_v2_app_4ppobezi5vbszhdk5ihhqtvjau23zqgqxdrejnubyzexjfvcvvndmfa6bhcfsunkwoytahetqc5elft663avoztuwavq5ildxi4kgoi';
+  const ONESIGNAL_SAFARI_ID = 'web.onesignal.auto.06522562-c4bd-4797-b0b8-e15944eb45af';
+
   let _supabase = null;
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -224,6 +233,22 @@
   let selectedStatus = 'yellow';
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
+
+  // Configurar OneSignal
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: ONESIGNAL_APP_ID,
+      safari_web_id: ONESIGNAL_SAFARI_ID,
+      notifyButton: { enable: false }
+    });
+
+    // Registrar al usuario actual en OneSignal para poder enviarle mensajes directos
+    await OneSignal.login(miUsuario);
+    
+    // Solicitar permiso de notificaciones Push en pantalla
+    await OneSignal.Notifications.requestPermission();
+  });
 
   function setStatus(color, el) {
     selectedStatus = color;
@@ -253,20 +278,13 @@
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       
-      // 1. Cargar estado inicial
       cargarEstadoInicial();
 
-      // 2. Suscribirse activamente a los cambios de la pareja
       _supabase
         .channel('realtime-partner-status')
         .on(
           'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'estados',
-            filter: `id=eq.${usuarioPareja}`
-          },
+          { event: '*', schema: 'public', table: 'estados', filter: `id=eq.${usuarioPareja}` },
           (payload) => {
             if (payload.new) {
               actualizarInterfazPareja(payload.new);
@@ -275,15 +293,11 @@
         )
         .subscribe();
 
-      // 3. Forzar recarga si se vuelve a abrir o desbloquear la app
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           cargarEstadoInicial();
         }
       });
-
-    } else {
-      document.getElementById('partner-status-text').innerText = 'Error: SDK no cargado';
     }
   });
 
@@ -291,7 +305,6 @@
     if (!_supabase) return;
 
     try {
-      // Cargar estado de la pareja
       const { data: pareja } = await _supabase
         .from('estados')
         .select('*')
@@ -300,7 +313,6 @@
 
       actualizarInterfazPareja(pareja);
 
-      // Cargar estado propio para marcar los botones correspondientes
       const { data: miEstado } = await _supabase
         .from('estados')
         .select('*')
@@ -312,31 +324,9 @@
           const btnStatus = document.querySelector(`.traffic-btn.${miEstado.status}`);
           setStatus(miEstado.status, btnStatus);
         }
-        if (miEstado.when) {
-          selectedWhen = miEstado.when;
-          document.querySelectorAll('#when-options .choice-btn').forEach(b => {
-            if (b.innerText.includes(miEstado.when) || miEstado.when.includes(b.innerText.replace(/[^a-zA-ZáéíóúÁÉÍÓÚ\s]/g, '').trim())) {
-              b.classList.add('selected');
-            } else {
-              b.classList.remove('selected');
-            }
-          });
-        }
-        if (miEstado.what) {
-          selectedWhat = miEstado.what;
-          document.querySelectorAll('#what-options .choice-btn').forEach(b => {
-            if (b.innerText.includes(miEstado.what) || miEstado.what.includes(b.innerText.replace(/[^a-zA-ZáéíóúÁÉÍÓÚ\s]/g, '').trim())) {
-              b.classList.add('selected');
-            } else {
-              b.classList.remove('selected');
-            }
-          });
-        }
       }
-
     } catch (err) {
       console.error(err);
-      document.getElementById('partner-status-text').innerText = 'Error al cargar';
     }
   }
 
@@ -356,16 +346,42 @@
       statusText.innerText = label;
       whenText.innerText = pareja.when || '-';
       whatText.innerText = pareja.what || '-';
-    } else {
-      statusText.innerText = 'Sin datos';
-      whenText.innerText = '-';
-      whatText.innerText = '-';
+    }
+  }
+
+  // Envío directo de la alerta sonora Push al teléfono de la pareja
+  async function sendPushNotification(status, when, what) {
+    let emoji = status === 'green' ? '🟢' : (status === 'yellow' ? '🟡' : '🔴');
+    let title = `${emoji} ¡Nuevo estado de tu pareja!`;
+    let message = status === 'red' 
+      ? 'Ha marcado estado Rojo (No disponible)' 
+      : `${when} | ${what}`;
+
+    try {
+      await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': `Key ${ONESIGNAL_REST_KEY}`
+        },
+        body: JSON.stringify({
+          app_id: ONESIGNAL_APP_ID,
+          target_channel: 'push',
+          include_aliases: {
+            external_id: [usuarioPareja]
+          },
+          headings: { es: title, en: title },
+          contents: { es: message, en: message }
+        })
+      });
+    } catch (e) {
+      console.error("Error enviando notificación Push", e);
     }
   }
 
   async function saveState() {
     if (!_supabase) {
-      alert("La conexión con Supabase aún no está lista.");
+      alert("La conexión aún no está lista.");
       return;
     }
 
@@ -381,7 +397,8 @@
     if (error) {
       alert("Error al guardar: " + error.message);
     } else {
-      alert("¡Estado actualizado con éxito!");
+      await sendPushNotification(selectedStatus, selectedWhen, selectedWhat);
+      alert("¡Estado actualizado y notificación enviada!");
     }
   }
 </script>
