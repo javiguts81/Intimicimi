@@ -12,6 +12,7 @@
     
     <link rel="manifest" href="./manifest.json">
 
+    <!-- Supabase y OneSignal -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 
@@ -57,13 +58,24 @@
             gap: 20px;
         }
 
+        header {
+            text-align: center;
+        }
+
         header h1 {
             font-size: 1.4rem;
             font-weight: 700;
-            text-align: center;
             background: linear-gradient(to right, #ec4899, #8b5cf6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+
+        .user-tag {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .partner-card {
@@ -160,16 +172,24 @@
             color: white; border: none; border-radius: 14px;
             padding: 14px; font-size: 0.95rem; font-weight: 600;
             cursor: pointer; margin-top: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .save-btn:disabled {
+            opacity: 0.6;
         }
     </style>
 </head>
 <body>
 
 <div class="app-container">
-    <header><h1>Conexión Íntima</h1></header>
+    <header>
+        <h1>Conexión Íntima</h1>
+        <div id="user-badge" class="user-tag">Cargando perfil...</div>
+    </header>
 
     <div class="partner-card">
-        <h2 id="partner-title">ESTADO DE TU PAREJA</h2>
+        <h2>ESTADO DE TU PAREJA</h2>
         <div id="partner-status-display" class="status-badge yellow">
             <span id="partner-status-text">Cargando...</span>
         </div>
@@ -213,10 +233,12 @@
 </div>
 
 <script>
+  // Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./OneSignalSDKWorker.js');
+    navigator.serviceWorker.register('./OneSignalSDKWorker.js').catch(e => console.log(e));
   }
 
+  // Credenciales Supabase y OneSignal
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
   
@@ -226,6 +248,7 @@
 
   let _supabase = null;
 
+  // Detección de Usuario
   const urlParams = new URLSearchParams(window.location.search);
   const miUsuario = urlParams.get('user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
@@ -234,7 +257,32 @@
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
-  // Inicializar OneSignal sin bloquear la ejecución
+  // Mostrar perfil en pantalla para verificar
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('user-badge').innerText = `Tu Usuario: ${miUsuario.toUpperCase()} (Pareja: ${usuarioPareja.toUpperCase()})`;
+    
+    // Inicializar Supabase
+    if (window.supabase) {
+      _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      cargarEstadoInicial();
+
+      // Listener Realtime
+      _supabase
+        .channel('realtime-partner-status')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'estados', filter: `id=eq.${usuarioPareja}` },
+          (payload) => {
+            if (payload.new) {
+              actualizarInterfazPareja(payload.new);
+            }
+          }
+        )
+        .subscribe();
+    }
+  });
+
+  // OneSignal Inicialización pasiva
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(function(OneSignal) {
     OneSignal.init({
@@ -243,7 +291,7 @@
       notifyButton: { enable: false }
     }).then(() => {
       OneSignal.login(miUsuario);
-    }).catch(err => console.log('OneSignal init error:', err));
+    });
   });
 
   function setStatus(color, el) {
@@ -269,26 +317,6 @@
     }
     if (el) el.classList.add('selected');
   }
-
-  window.addEventListener('DOMContentLoaded', () => {
-    if (window.supabase) {
-      _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      cargarEstadoInicial();
-
-      _supabase
-        .channel('realtime-partner-status')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'estados', filter: `id=eq.${usuarioPareja}` },
-          (payload) => {
-            if (payload.new) {
-              actualizarInterfazPareja(payload.new);
-            }
-          }
-        )
-        .subscribe();
-    }
-  });
 
   async function cargarEstadoInicial() {
     if (!_supabase) return;
@@ -324,76 +352,60 @@
     }
   }
 
-  // Guardar estado
+  // GUARDADO DIRECTO
   async function saveState() {
     const btn = document.getElementById('btn-save');
     btn.innerText = "Guardando...";
     btn.disabled = true;
 
-    // 1. Solicitar permisos de notificación si está OneSignal listo
-    try {
-      if (window.OneSignal) {
-        await window.OneSignal.Notifications.requestPermission();
-        await window.OneSignal.login(miUsuario);
-      }
-    } catch(e) {
-      console.log('Error permisos OneSignal:', e);
-    }
-
-    // 2. Guardar en Supabase
+    // 1. Guardar obligatoriamente en Supabase
     if (_supabase) {
-      try {
-        const { error } = await _supabase
-          .from('estados')
-          .upsert({
-            id: miUsuario,
-            status: selectedStatus,
-            when: (selectedStatus === 'red') ? '-' : selectedWhen,
-            what: (selectedStatus === 'red') ? '-' : selectedWhat
-          }, { onConflict: 'id' });
+      const { error } = await _supabase
+        .from('estados')
+        .upsert({
+          id: miUsuario,
+          status: selectedStatus,
+          when: (selectedStatus === 'red') ? '-' : selectedWhen,
+          what: (selectedStatus === 'red') ? '-' : selectedWhat
+        }, { onConflict: 'id' });
 
-        if (error) {
-          alert("Error Supabase: " + error.message);
-        } else {
-          alert("¡Estado actualizado con éxito!");
-        }
-      } catch(e) {
-        alert("Error de conexión: " + e.message);
+      if (error) {
+        alert("Error de conexión: " + error.message);
+      } else {
+        alert("¡Estado guardado correctamente!");
       }
     } else {
-      alert("Error: Supabase no ha cargado correctamente.");
+      alert("Error: No hay conexión con la base de datos.");
     }
 
-    // 3. Enviar notificación Push en segundo plano
-    try {
-      let emoji = selectedStatus === 'green' ? '🟢' : (selectedStatus === 'yellow' ? '🟡' : '🔴');
-      let title = `${emoji} ¡Nuevo estado de tu pareja!`;
-      let message = selectedStatus === 'red' 
-        ? 'Ha marcado estado Rojo (No disponible)' 
-        : `${selectedWhen} | ${selectedWhat}`;
-
-      fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': `Key ${ONESIGNAL_REST_KEY}`
-        },
-        body: JSON.stringify({
-          app_id: ONESIGNAL_APP_ID,
-          target_channel: 'push',
-          include_aliases: {
-            external_id: [usuarioPareja]
-          },
-          headings: { es: title, en: title },
-          contents: { es: message, en: message }
-        })
-      });
-    } catch(e) {
-      console.log('Error enviando notificación:', e);
-    }
+    // 2. Notificación Push asíncrona
+    enviarPushEnSegundoPlano();
 
     btn.innerText = "Actualizar Mi Estado";
     btn.disabled = false;
+  }
+
+  function enviarPushEnSegundoPlano() {
+    let emoji = selectedStatus === 'green' ? '🟢' : (selectedStatus === 'yellow' ? '🟡' : '🔴');
+    let title = `${emoji} ¡Nuevo estado de tu pareja!`;
+    let message = selectedStatus === 'red' 
+      ? 'Ha marcado estado Rojo (No disponible)' 
+      : `${selectedWhen} | ${selectedWhat}`;
+
+    fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Authorization': `Key ${ONESIGNAL_REST_KEY}`
+      },
+      body: JSON.stringify({
+        app_id: ONESIGNAL_APP_ID,
+        target_channel: 'push',
+        include_aliases: { external_id: [usuarioPareja] },
+        headings: { es: title, en: title },
+        contents: { es: message, en: message }
+      })
+    }).catch(err => console.log('Push no enviado:', err));
   }
 </script>
 
