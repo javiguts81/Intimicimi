@@ -234,7 +234,7 @@
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
-  // Configurar OneSignal
+  // Configurar e inicializar OneSignal
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
@@ -243,11 +243,8 @@
       notifyButton: { enable: false }
     });
 
-    // Registrar al usuario actual en OneSignal para poder enviarle mensajes directos
+    // Identificar a este dispositivo con el usuario ('me' o 'partner')
     await OneSignal.login(miUsuario);
-    
-    // Solicitar permiso de notificaciones Push en pantalla
-    await OneSignal.Notifications.requestPermission();
   });
 
   function setStatus(color, el) {
@@ -349,7 +346,7 @@
     }
   }
 
-  // Envío directo de la alerta sonora Push al teléfono de la pareja
+  // Envío directo de la alerta Push
   async function sendPushNotification(status, when, what) {
     let emoji = status === 'green' ? '🟢' : (status === 'yellow' ? '🟡' : '🔴');
     let title = `${emoji} ¡Nuevo estado de tu pareja!`;
@@ -383,6 +380,13 @@
     if (!_supabase) {
       alert("La conexión aún no está lista.");
       return;
+    }
+
+    // Solicitar permiso de notificaciones Push explícitamente en iOS tras el toque del usuario
+    if (window.OneSignalDeferred) {
+      await OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.Notifications.requestPermission();
+      });
     }
 
     const { error } = await _supabase
