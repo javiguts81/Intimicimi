@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Íntima">
     
-    <!-- Manifest en línea para instalación móvil -->
+    <!-- Manifest en línea -->
     <link rel="manifest" href='data:application/json,{"name":"Conexión Íntima","short_name":"Íntima","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://fav.farm/🔥","sizes":"192x192","type":"image/png"}]}'>
 
     <!-- Cliente SDK de Supabase -->
@@ -64,30 +64,6 @@
             background: linear-gradient(to right, #ec4899, #8b5cf6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-        }
-
-        .user-switch {
-            display: flex;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 4px;
-            border-radius: 12px;
-        }
-
-        .user-tab {
-            flex: 1;
-            padding: 8px;
-            border: none;
-            background: none;
-            color: var(--text-muted);
-            font-size: 0.8rem;
-            font-weight: 600;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        .user-tab.active {
-            background: rgba(255, 255, 255, 0.12);
-            color: var(--text-main);
         }
 
         .partner-card {
@@ -192,17 +168,12 @@
 <div class="app-container">
     <header><h1>Conexión Íntima</h1></header>
 
-    <div class="user-switch">
-        <button class="user-tab active" onclick="switchUser('me')">Mi Estado</button>
-        <button class="user-tab" onclick="switchUser('partner')">Vista Pareja</button>
-    </div>
-
     <div class="partner-card">
-        <h2 id="partner-title">Estado de tu pareja</h2>
+        <h2 id="partner-title">ESTADO DE TU PAREJA</h2>
         <div id="partner-status-display" class="status-badge yellow">
             <span id="partner-status-text">Cargando...</span>
         </div>
-        <div class="partner-details" id="partner-details-display">
+        <div class="partner-details">
             <div><strong>¿Cuándo?:</strong> <span id="partner-when">-</span></div>
             <div><strong>¿Qué apetece?:</strong> <span id="partner-what">-</span></div>
         </div>
@@ -211,16 +182,16 @@
     <div>
         <div class="section-title">1. Tu disponibilidad</div>
         <div class="options-grid">
-            <button class="traffic-btn red" onclick="setStatus('red')"><span class="dot"></span><span>Rojo</span></button>
-            <button class="traffic-btn yellow selected" onclick="setStatus('yellow')"><span class="dot"></span><span>Amarillo</span></button>
-            <button class="traffic-btn green" onclick="setStatus('green')"><span class="dot"></span><span>Verde</span></button>
+            <button class="traffic-btn red" onclick="setStatus('red', this)"><span class="dot"></span><span>Rojo</span></button>
+            <button class="traffic-btn yellow selected" onclick="setStatus('yellow', this)"><span class="dot"></span><span>Amarillo</span></button>
+            <button class="traffic-btn green" onclick="setStatus('green', this)"><span class="dot"></span><span>Verde</span></button>
         </div>
     </div>
 
     <div id="extra-options" class="sub-panel">
         <div>
             <div class="section-title">2. ¿Cuándo?</div>
-            <div class="options-grid">
+            <div class="options-grid" id="when-options">
                 <button class="choice-btn" onclick="selectChoice('when', 'Ahora mismo', this)">⚡ Ahora</button>
                 <button class="choice-btn selected" onclick="selectChoice('when', 'En un rato', this)">⏳ En un rato</button>
                 <button class="choice-btn" onclick="selectChoice('when', 'Esta noche', this)">🌙 Esta noche</button>
@@ -229,7 +200,7 @@
 
         <div>
             <div class="section-title">3. ¿Qué te apetece?</div>
-            <div class="grid-2">
+            <div class="grid-2" id="what-options">
                 <button class="choice-btn selected" onclick="selectChoice('what', 'Besos y caricias', this)">💆 Mimos & Besos</button>
                 <button class="choice-btn" onclick="selectChoice('what', 'Sexo oral / Juegos', this)">💋 Sexo Oral</button>
                 <button class="choice-btn" onclick="selectChoice('what', 'Hacer el amor', this)">🔥 Hacer el amor</button>
@@ -242,65 +213,103 @@
 </div>
 
 <script>
-  // 1. Inicializar Supabase (mantén tus claves actuales)
-  const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
-  const SUPABASE_KEY = 'TU-ANON-KEY';
-  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  // 1. Configuración e Inicialización de Supabase
+  const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
+  const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // 2. DETECTAR QUIÉN ABRE LA APP DESDE LA URL (?user=me O ?user=partner)
+  // 2. Identificar al usuario desde la URL (?user=me o ?user=partner)
   const urlParams = new URLSearchParams(window.location.search);
-  const miUsuario = urlParams.get('user') || 'me'; // Por defecto será 'me'
+  const miUsuario = urlParams.get('user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
-  // 3. FUNCIÓN PARA CARGAR LOS ESTADOS EN LA PANTALLA
-  async function cargarEstados() {
-    // Cargar MI estado
-    const { data: miEstado } = await supabase
-      .from('estados')
-      .select('*')
-      .eq('id', miUsuario)
-      .single();
+  // Variables para guardar las selecciones actuales de los botones
+  let selectedStatus = 'yellow';
+  let selectedWhen = 'En un rato';
+  let selectedWhat = 'Besos y caricias';
 
-    // Cargar el ESTADO DE MI PAREJA
-    const { data: estadoPareja } = await supabase
-      .from('estados')
-      .select('*')
-      .eq('id', usuarioPareja)
-      .single();
+  // 3. Manejar selección de disponibilidad (Rojo, Amarillo, Verde)
+  function setStatus(color, el) {
+    selectedStatus = color;
+    document.querySelectorAll('.traffic-btn').forEach(btn => btn.classList.remove('selected'));
+    el.classList.add('selected');
 
-    if (estadoPareja) {
-      // Actualizar el texto que se ve en la sección "ESTADO DE TU PAREJA"
-      document.getElementById('estado-pareja-ganas').innerText = estadoPareja.status || 'Sin datos';
-      document.getElementById('estado-pareja-cuando').innerText = estadoPareja.when || 'Sin datos';
-      document.getElementById('estado-pareja-apetece').innerText = estadoPareja.what || 'Sin datos';
+    const extraPanel = document.getElementById('extra-options');
+    if (color === 'red') {
+      extraPanel.classList.add('disabled');
+    } else {
+      extraPanel.classList.remove('disabled');
     }
   }
 
-  // 4. FUNCIÓN PARA GUARDAR AL PULSAR EL BOTÓN "Actualizar Mi Estado"
-  async function actualizarMiEstado() {
-    // Lee los valores que hayas seleccionado en los botones del formulario
-    const statusSeleccionado = obtenerGanasSeleccionadas(); // adapta según tus funciones o variables
-    const cuandoSeleccionado = obtenerCuandoSeleccionado();
-    const apeteceSeleccionado = obtenerApeteceSeleccionado();
+  // 4. Manejar selección de opciones (Cuándo y Qué apetece)
+  function selectChoice(type, value, el) {
+    if (type === 'when') {
+      selectedWhen = value;
+      document.querySelectorAll('#when-options .choice-btn').forEach(b => b.classList.remove('selected'));
+    } else if (type === 'what') {
+      selectedWhat = value;
+      document.querySelectorAll('#what-options .choice-btn').forEach(b => b.classList.remove('selected'));
+    }
+    el.classList.add('selected');
+  }
 
-    const { data, error } = await supabase
+  // 5. Cargar los datos de la pareja desde Supabase
+  async function cargarEstados() {
+    try {
+      const { data: pareja, error } = await _supabase
+        .from('estados')
+        .select('*')
+        .eq('id', usuarioPareja)
+        .maybeSingle();
+
+      const statusBadge = document.getElementById('partner-status-display');
+      const statusText = document.getElementById('partner-status-text');
+      const whenText = document.getElementById('partner-when');
+      const whatText = document.getElementById('partner-what');
+
+      if (pareja) {
+        statusBadge.className = `status-badge ${pareja.status || 'yellow'}`;
+        
+        let label = 'Desconocido';
+        if (pareja.status === 'red') label = '🔴 No disponible';
+        else if (pareja.status === 'yellow') label = '🟡 Con ganas...';
+        else if (pareja.status === 'green') label = '🟢 ¡Con muchas ganas!';
+
+        statusText.innerText = label;
+        whenText.innerText = pareja.when || '-';
+        whatText.innerText = pareja.what || '-';
+      } else {
+        statusText.innerText = 'Sin datos';
+        whenText.innerText = '-';
+        whatText.innerText = '-';
+      }
+    } catch (err) {
+      console.error(err);
+      document.getElementById('partner-status-text').innerText = 'Error al cargar';
+    }
+  }
+
+  // 6. Guardar cambios al hacer clic en "Actualizar Mi Estado"
+  async function saveState() {
+    const { error } = await _supabase
       .from('estados')
       .upsert({
-        id: miUsuario, // Guarda exactamente en la fila 'me' o 'partner'
-        status: statusSeleccionado,
-        when: cuandoSeleccionado,
-        what: apeteceSeleccionado
+        id: miUsuario,
+        status: selectedStatus,
+        when: (selectedStatus === 'red') ? '-' : selectedWhen,
+        what: (selectedStatus === 'red') ? '-' : selectedWhat
       }, { onConflict: 'id' });
 
     if (error) {
       alert("Error al guardar: " + error.message);
     } else {
-      alert("¡Estado actualizado!");
-      cargarEstados(); // Recargar datos de la pantalla
+      alert("¡Estado actualizado con éxito!");
+      cargarEstados();
     }
   }
 
-  // Cargar datos automáticamente al abrir la página
+  // Cargar datos al iniciar
   window.onload = cargarEstados;
 </script>
 
