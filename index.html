@@ -209,7 +209,7 @@
         </div>
     </div>
 
-    <button class="save-btn" onclick="saveState()">Actualizar Mi Estado</button>
+    <button id="btn-save" class="save-btn" onclick="saveState()">Actualizar Mi Estado</button>
 </div>
 
 <script>
@@ -234,24 +234,16 @@
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
+  // Inicializar OneSignal sin bloquear la ejecución
   window.OneSignalDeferred = window.OneSignalDeferred || [];
-  OneSignalDeferred.push(async function(OneSignal) {
-    await OneSignal.init({
+  OneSignalDeferred.push(function(OneSignal) {
+    OneSignal.init({
       appId: ONESIGNAL_APP_ID,
       safari_web_id: ONESIGNAL_SAFARI_ID,
       notifyButton: { enable: false }
-    });
-
-    // Detectar si cambian las notificaciones para registrar el ID
-    OneSignal.User.PushSubscription.addEventListener("change", async (event) => {
-      if (event.current.optedIn) {
-        await OneSignal.login(miUsuario);
-      }
-    });
-
-    if (OneSignal.Notifications.permission) {
-      await OneSignal.login(miUsuario);
-    }
+    }).then(() => {
+      OneSignal.login(miUsuario);
+    }).catch(err => console.log('OneSignal init error:', err));
   });
 
   function setStatus(color, el) {
@@ -281,7 +273,6 @@
   window.addEventListener('DOMContentLoaded', () => {
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      
       cargarEstadoInicial();
 
       _supabase
@@ -296,18 +287,11 @@
           }
         )
         .subscribe();
-
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          cargarEstadoInicial();
-        }
-      });
     }
   });
 
   async function cargarEstadoInicial() {
     if (!_supabase) return;
-
     try {
       const { data: pareja } = await _supabase
         .from('estados')
@@ -315,20 +299,9 @@
         .eq('id', usuarioPareja)
         .maybeSingle();
 
-      actualizarInterfazPareja(pareja);
-
-      const { data: miEstado } = await _supabase
-        .from('estados')
-        .select('*')
-        .eq('id', miUsuario)
-        .maybeSingle();
-
-      if (miEstado && miEstado.status) {
-        const btnStatus = document.querySelector(`.traffic-btn.${miEstado.status}`);
-        setStatus(miEstado.status, btnStatus);
-      }
+      if (pareja) actualizarInterfazPareja(pareja);
     } catch (err) {
-      console.error(err);
+      console.error("Error leyendo Supabase:", err);
     }
   }
 
@@ -351,15 +324,55 @@
     }
   }
 
-  async function sendPushNotification(status, when, what) {
-    let emoji = status === 'green' ? '🟢' : (status === 'yellow' ? '🟡' : '🔴');
-    let title = `${emoji} ¡Nuevo estado de tu pareja!`;
-    let message = status === 'red' 
-      ? 'Ha marcado estado Rojo (No disponible)' 
-      : `${when} | ${what}`;
+  // Guardar estado
+  async function saveState() {
+    const btn = document.getElementById('btn-save');
+    btn.innerText = "Guardando...";
+    btn.disabled = true;
 
+    // 1. Solicitar permisos de notificación si está OneSignal listo
     try {
-      await fetch('https://onesignal.com/api/v1/notifications', {
+      if (window.OneSignal) {
+        await window.OneSignal.Notifications.requestPermission();
+        await window.OneSignal.login(miUsuario);
+      }
+    } catch(e) {
+      console.log('Error permisos OneSignal:', e);
+    }
+
+    // 2. Guardar en Supabase
+    if (_supabase) {
+      try {
+        const { error } = await _supabase
+          .from('estados')
+          .upsert({
+            id: miUsuario,
+            status: selectedStatus,
+            when: (selectedStatus === 'red') ? '-' : selectedWhen,
+            what: (selectedStatus === 'red') ? '-' : selectedWhat
+          }, { onConflict: 'id' });
+
+        if (error) {
+          alert("Error Supabase: " + error.message);
+        } else {
+          alert("¡Estado actualizado con éxito!");
+        }
+      } catch(e) {
+        alert("Error de conexión: " + e.message);
+      }
+    } else {
+      alert("Error: Supabase no ha cargado correctamente.");
+    }
+
+    // 3. Enviar notificación Push en segundo plano
+    try {
+      let emoji = selectedStatus === 'green' ? '🟢' : (selectedStatus === 'yellow' ? '🟡' : '🔴');
+      let title = `${emoji} ¡Nuevo estado de tu pareja!`;
+      let message = selectedStatus === 'red' 
+        ? 'Ha marcado estado Rojo (No disponible)' 
+        : `${selectedWhen} | ${selectedWhat}`;
+
+      fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
@@ -375,46 +388,12 @@
           contents: { es: message, en: message }
         })
       });
-    } catch (e) {
-      console.warn("Error al enviar push:", e);
-    }
-  }
-
-  async function saveState() {
-    if (!_supabase) {
-      alert("La conexión con el servidor aún no está lista.");
-      return;
+    } catch(e) {
+      console.log('Error enviando notificación:', e);
     }
 
-    // Pedir permisos en iOS/Android
-    try {
-      await OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.Notifications.requestPermission();
-        await OneSignal.login(miUsuario);
-      });
-    } catch (err) {
-      console.warn("Permisos:", err);
-    }
-
-    // Guardar en Supabase
-    const { error } = await _supabase
-      .from('estados')
-      .upsert({
-        id: miUsuario,
-        status: selectedStatus,
-        when: (selectedStatus === 'red') ? '-' : selectedWhen,
-        what: (selectedStatus === 'red') ? '-' : selectedWhat
-      }, { onConflict: 'id' });
-
-    if (error) {
-      alert("Error en la base de datos: " + error.message);
-      return;
-    }
-
-    // Intentar envío push
-    sendPushNotification(selectedStatus, selectedWhen, selectedWhat);
-
-    alert("¡Estado actualizado correctamente!");
+    btn.innerText = "Actualizar Mi Estado";
+    btn.disabled = false;
   }
 </script>
 
