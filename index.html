@@ -70,6 +70,15 @@
             -webkit-text-fill-color: transparent;
         }
 
+        .user-identity-banner {
+            font-size: 0.75rem;
+            text-align: center;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px;
+            border-radius: 8px;
+        }
+
         .notify-bar {
             background: rgba(139, 92, 246, 0.15);
             border: 1px solid rgba(139, 92, 246, 0.3);
@@ -203,6 +212,8 @@
         <h1>Conexión Íntima</h1>
     </header>
 
+    <div id="user-display" class="user-identity-banner">Cargando usuario...</div>
+
     <div id="notify-box" class="notify-bar" style="display: none;">
         <span>🔔 Activa notificaciones para avisos</span>
         <button class="notify-btn" onclick="pedirNotificaciones()">Activar</button>
@@ -253,10 +264,8 @@
 </div>
 
 <script>
-  // Registrar Service Worker para PWA / Notificaciones
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./OneSignalSDKWorker.js')
-      .catch(e => console.log('Error registrando SW:', e));
+    navigator.serviceWorker.register('./OneSignalSDKWorker.js').catch(e => console.log('SW Error:', e));
   }
 
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
@@ -269,10 +278,11 @@
   let _supabase = null;
   let isSaving = false;
 
-  // Lógica de Identidad
+  // Lógica de Identidad Forzada por URL
   const urlParams = new URLSearchParams(window.location.search);
   const userParam = urlParams.get('user');
 
+  // Si en la URL viene 'partner' o 'me', FORZAMOS la reescritura en el localStorage
   if (userParam === 'partner' || userParam === 'me') {
     localStorage.setItem('intima_user', userParam);
   }
@@ -285,6 +295,9 @@
   let selectedWhat = 'Besos y caricias';
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Mostrar en pantalla qué perfil se está usando
+    document.getElementById('user-display').innerText = `Perfil Activo: ${miUsuario.toUpperCase()}`;
+
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       cargarEstadoInicial();
@@ -308,7 +321,7 @@
     }
   });
 
-  // Inicialización de OneSignal
+  // Inicialización de OneSignal con la identidad actual
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(function(OneSignal) {
     OneSignal.init({
@@ -317,7 +330,7 @@
       notifyButton: { enable: false }
     }).then(() => {
       OneSignal.login(miUsuario);
-    }).catch(err => console.log('Error OneSignal init:', err));
+    }).catch(err => console.log('OneSignal Error:', err));
   });
 
   function pedirNotificaciones() {
@@ -452,7 +465,7 @@
       body: JSON.stringify({
         app_id: ONESIGNAL_APP_ID,
         target_channel: 'push',
-        include_aliases: { external_id: [usuarioPareja] },
+        include_external_user_ids: [usuarioPareja],
         headings: { es: title, en: title },
         contents: { es: message, en: message }
       })
