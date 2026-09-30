@@ -216,7 +216,7 @@
 </div>
 
 <script>
-  // Registro explícito del Service Worker para PWA
+  // Registro del Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./OneSignalSDKWorker.js');
   }
@@ -350,6 +350,7 @@
     }
   }
 
+  // Función de notificaciones aislada para evitar bloqueos
   async function sendPushNotification(status, when, what) {
     let emoji = status === 'green' ? '🟢' : (status === 'yellow' ? '🟡' : '🔴');
     let title = `${emoji} ¡Nuevo estado de tu pareja!`;
@@ -358,7 +359,7 @@
       : `${when} | ${what}`;
 
     try {
-      await fetch('https://api.onesignal.com/notifications', {
+      await fetch('https://onesignal.com/api/v1/notifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
@@ -375,7 +376,7 @@
         })
       });
     } catch (e) {
-      console.error("Error enviando notificación Push", e);
+      console.warn("No se pudo enviar la notificación Push:", e);
     }
   }
 
@@ -385,13 +386,18 @@
       return;
     }
 
-    // Solicitar permiso de notificaciones Push explícitamente al pulsar el botón
+    // Solicitar permiso de notificaciones Push explícitamente en iOS tras el toque del usuario
     if (window.OneSignalDeferred) {
-      await OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.Notifications.requestPermission();
-      });
+      try {
+        await OneSignalDeferred.push(async function(OneSignal) {
+          await OneSignal.Notifications.requestPermission();
+        });
+      } catch (err) {
+        console.warn("Permiso denegado o ignorado:", err);
+      }
     }
 
+    // 1. Guardar en Supabase
     const { error } = await _supabase
       .from('estados')
       .upsert({
@@ -402,11 +408,14 @@
       }, { onConflict: 'id' });
 
     if (error) {
-      alert("Error al guardar: " + error.message);
-    } else {
-      await sendPushNotification(selectedStatus, selectedWhen, selectedWhat);
-      alert("¡Estado actualizado y notificación enviada!");
+      alert("Error al guardar en la base de datos: " + error.message);
+      return;
     }
+
+    // 2. Intentar enviar notificación Push en segundo plano
+    sendPushNotification(selectedStatus, selectedWhen, selectedWhat);
+
+    alert("¡Estado actualizado con éxito!");
   }
 </script>
 
