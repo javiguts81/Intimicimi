@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -68,14 +69,6 @@
             background: linear-gradient(to right, #ec4899, #8b5cf6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-        }
-
-        .user-tag {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            margin-top: 4px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
         }
 
         .partner-card {
@@ -175,7 +168,6 @@
             transition: opacity 0.2s;
         }
 
-        /* Estado bloqueado cuando guarda */
         button:disabled {
             opacity: 0.5 !important;
             cursor: not-allowed !important;
@@ -187,7 +179,6 @@
 <div class="app-container">
     <header>
         <h1>Conexión Íntima</h1>
-        <div id="user-badge" class="user-tag">Cargando perfil...</div>
     </header>
 
     <div class="partner-card">
@@ -249,8 +240,17 @@
   let _supabase = null;
   let isSaving = false;
 
+  // --- DETECCIÓN SILENCIOSA Y MEMORIA DEL TELÉFONO ---
   const urlParams = new URLSearchParams(window.location.search);
-  const miUsuario = urlParams.get('user') || 'me';
+  let userParam = urlParams.get('user');
+
+  // Si se abre desde una URL que trae ?user=me o ?user=partner, lo memorizamos en el móvil
+  if (userParam === 'me' || userParam === 'partner') {
+    localStorage.setItem('intima_user', userParam);
+  }
+
+  // Si se abre desde la pantalla de inicio (sin URL), lee el usuario previamente guardado
+  const miUsuario = localStorage.getItem('intima_user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
   let selectedStatus = 'yellow';
@@ -258,8 +258,6 @@
   let selectedWhat = 'Besos y caricias';
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('user-badge').innerText = `Tu Usuario: ${miUsuario.toUpperCase()} (Pareja: ${usuarioPareja.toUpperCase()})`;
-    
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       cargarEstadoInicial();
@@ -369,7 +367,6 @@
     setUIState(true);
 
     try {
-      // 1. Guardar en Supabase
       if (_supabase) {
         const { error } = await _supabase
           .from('estados')
@@ -389,13 +386,11 @@
         alert("Error: No hay conexión con la base de datos.");
       }
 
-      // 2. Notificación Push
       enviarPushEnSegundoPlano();
 
     } catch (e) {
       alert("Error inesperado: " + e.message);
     } finally {
-      // Garantizar que SIEMPRE se desbloquean los botones y vuelve el texto
       setUIState(false);
     }
   }
