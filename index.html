@@ -70,6 +70,29 @@
             -webkit-text-fill-color: transparent;
         }
 
+        .notify-bar {
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 14px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 0.8rem;
+        }
+
+        .notify-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
         .partner-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -180,6 +203,11 @@
         <h1>Conexión Íntima</h1>
     </header>
 
+    <div id="notify-box" class="notify-bar" style="display: none;">
+        <span>🔔 Activa notificaciones para avisos</span>
+        <button class="notify-btn" onclick="pedirNotificaciones()">Activar</button>
+    </div>
+
     <div class="partner-card">
         <h2>ESTADO DE TU PAREJA</h2>
         <div id="partner-status-display" class="status-badge yellow">
@@ -226,7 +254,7 @@
 
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./OneSignalSDKWorker.js').catch(e => console.log(e));
+    navigator.serviceWorker.register('./OneSignalSDKWorker.js').catch(e => console.log('SW Error:', e));
   }
 
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
@@ -239,7 +267,7 @@
   let _supabase = null;
   let isSaving = false;
 
-  // 1. DETERMINAR Y FIJAR LA IDENTIDAD DEL DISPOSITIVO
+  // Lógica de Identidad
   const urlParams = new URLSearchParams(window.location.search);
   const userParam = urlParams.get('user');
 
@@ -272,8 +300,14 @@
         )
         .subscribe();
     }
+
+    // Comprobar si las notificaciones no están concedidas para mostrar la barra
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      document.getElementById('notify-box').style.display = 'flex';
+    }
   });
 
+  // Inicialización de OneSignal
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(function(OneSignal) {
     OneSignal.init({
@@ -284,6 +318,16 @@
       OneSignal.login(miUsuario);
     }).catch(err => console.log('OneSignal init err:', err));
   });
+
+  function pedirNotificaciones() {
+    window.OneSignalDeferred.push(function(OneSignal) {
+      OneSignal.Notifications.requestPermission().then(permission => {
+        if (permission) {
+          document.getElementById('notify-box').style.display = 'none';
+        }
+      });
+    });
+  }
 
   function setStatus(color, el) {
     if (isSaving) return;
