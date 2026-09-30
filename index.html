@@ -4,17 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Conexión Íntima</title>
+    
+    <!-- Configuración para iOS PWA -->
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Íntima">
     
-    <!-- Manifest PWA -->
-    <link rel="manifest" href='data:application/json,{"name":"Conexión Íntima","short_name":"Íntima","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://fav.farm/🔥","sizes":"192x192","type":"image/png"}]}'>
+    <!-- Enlace al Manifest externo -->
+    <link rel="manifest" href="./manifest.json">
 
-    <!-- SDK Supabase -->
+    <!-- SDK Supabase y OneSignal -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- SDK OneSignal -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 
     <style>
@@ -215,11 +216,16 @@
 </div>
 
 <script>
-  // Configuración de Supabase
+  // Registro explícito del Service Worker para PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./OneSignalSDKWorker.js');
+  }
+
+  // Configuración Supabase
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
   
-  // CONFIGURACIÓN DE ONESIGNAL
+  // Configuración OneSignal
   const ONESIGNAL_APP_ID = 'e3dee093-28ed-432c-9c6a-ea0e784ea905';
   const ONESIGNAL_REST_KEY = 'os_v2_app_4ppobezi5vbszhdk5ihhqtvjau23zqgqxdrejnubyzexjfvcvvndmfa6bhcfsunkwoytahetqc5elft663avoztuwavq5ildxi4kgoi';
   const ONESIGNAL_SAFARI_ID = 'web.onesignal.auto.06522562-c4bd-4797-b0b8-e15944eb45af';
@@ -234,7 +240,6 @@
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
-  // Configurar e inicializar OneSignal
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(async function(OneSignal) {
     await OneSignal.init({
@@ -243,7 +248,6 @@
       notifyButton: { enable: false }
     });
 
-    // Identificar a este dispositivo con el usuario ('me' o 'partner')
     await OneSignal.login(miUsuario);
   });
 
@@ -346,7 +350,6 @@
     }
   }
 
-  // Envío directo de la alerta Push
   async function sendPushNotification(status, when, what) {
     let emoji = status === 'green' ? '🟢' : (status === 'yellow' ? '🟡' : '🔴');
     let title = `${emoji} ¡Nuevo estado de tu pareja!`;
@@ -382,7 +385,7 @@
       return;
     }
 
-    // Solicitar permiso de notificaciones Push explícitamente en iOS tras el toque del usuario
+    // Solicitar permiso de notificaciones Push explícitamente al pulsar el botón
     if (window.OneSignalDeferred) {
       await OneSignalDeferred.push(async function(OneSignal) {
         await OneSignal.Notifications.requestPermission();
