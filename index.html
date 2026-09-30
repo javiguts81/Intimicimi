@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -240,16 +239,14 @@
   let _supabase = null;
   let isSaving = false;
 
-  // --- DETECCIÓN SILENCIOSA Y MEMORIA DEL TELÉFONO ---
+  // 1. DETERMINAR Y FIJAR LA IDENTIDAD DEL DISPOSITIVO
   const urlParams = new URLSearchParams(window.location.search);
-  let userParam = urlParams.get('user');
+  const userParam = urlParams.get('user');
 
-  // Si se abre desde una URL que trae ?user=me o ?user=partner, lo memorizamos en el móvil
-  if (userParam === 'me' || userParam === 'partner') {
+  if (userParam === 'partner' || userParam === 'me') {
     localStorage.setItem('intima_user', userParam);
   }
 
-  // Si se abre desde la pantalla de inicio (sin URL), lee el usuario previamente guardado
   const miUsuario = localStorage.getItem('intima_user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
