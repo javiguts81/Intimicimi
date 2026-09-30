@@ -213,26 +213,25 @@
 </div>
 
 <script>
-  // 1. Configuración e Inicialización de Supabase
+  // 1. Configuración de Supabase
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
-  const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  let _supabase = null;
 
   // 2. Identificar al usuario desde la URL (?user=me o ?user=partner)
   const urlParams = new URLSearchParams(window.location.search);
   const miUsuario = urlParams.get('user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
-  // Variables para guardar las selecciones actuales de los botones
+  // Variables de estado
   let selectedStatus = 'yellow';
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
-  // 3. Manejar selección de disponibilidad (Rojo, Amarillo, Verde)
   function setStatus(color, el) {
     selectedStatus = color;
     document.querySelectorAll('.traffic-btn').forEach(btn => btn.classList.remove('selected'));
-    el.classList.add('selected');
+    if (el) el.classList.add('selected');
 
     const extraPanel = document.getElementById('extra-options');
     if (color === 'red') {
@@ -242,7 +241,6 @@
     }
   }
 
-  // 4. Manejar selección de opciones (Cuándo y Qué apetece)
   function selectChoice(type, value, el) {
     if (type === 'when') {
       selectedWhen = value;
@@ -251,13 +249,25 @@
       selectedWhat = value;
       document.querySelectorAll('#what-options .choice-btn').forEach(b => b.classList.remove('selected'));
     }
-    el.classList.add('selected');
+    if (el) el.classList.add('selected');
   }
 
-  // 5. Cargar los datos de la pareja desde Supabase
+  // 3. Inicialización tras carga completa del SDK
+  window.addEventListener('DOMContentLoaded', () => {
+    if (window.supabase) {
+      _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+      cargarEstados();
+    } else {
+      document.getElementById('partner-status-text').innerText = 'Error: SDK no cargado';
+    }
+  });
+
   async function cargarEstados() {
+    if (!_supabase) return;
+
     try {
-      const { data: pareja, error } = await _supabase
+      // Cargar estado de la PAREJA
+      const { data: pareja, error: errPareja } = await _supabase
         .from('estados')
         .select('*')
         .eq('id', usuarioPareja)
@@ -270,8 +280,7 @@
 
       if (pareja) {
         statusBadge.className = `status-badge ${pareja.status || 'yellow'}`;
-        
-        let label = 'Desconocido';
+        let label = 'Sin indicar';
         if (pareja.status === 'red') label = '🔴 No disponible';
         else if (pareja.status === 'yellow') label = '🟡 Con ganas...';
         else if (pareja.status === 'green') label = '🟢 ¡Con muchas ganas!';
@@ -284,14 +293,53 @@
         whenText.innerText = '-';
         whatText.innerText = '-';
       }
+
+      // Cargar MI estado anterior para marcar los botones correspondientes
+      const { data: miEstado } = await _supabase
+        .from('estados')
+        .select('*')
+        .eq('id', miUsuario)
+        .maybeSingle();
+
+      if (miEstado) {
+        if (miEstado.status) {
+          const btnStatus = document.querySelector(`.traffic-btn.${miEstado.status}`);
+          setStatus(miEstado.status, btnStatus);
+        }
+        if (miEstado.when) {
+          selectedWhen = miEstado.when;
+          document.querySelectorAll('#when-options .choice-btn').forEach(b => {
+            if (b.innerText.includes(miEstado.when) || miEstado.when.includes(b.innerText.replace(/[^a-zA-ZáéíóúÁÉÍÓÚ\s]/g, '').trim())) {
+              b.classList.add('selected');
+            } else {
+              b.classList.remove('selected');
+            }
+          });
+        }
+        if (miEstado.what) {
+          selectedWhat = miEstado.what;
+          document.querySelectorAll('#what-options .choice-btn').forEach(b => {
+            if (b.innerText.includes(miEstado.what) || miEstado.what.includes(b.innerText.replace(/[^a-zA-ZáéíóúÁÉÍÓÚ\s]/g, '').trim())) {
+              b.classList.add('selected');
+            } else {
+              b.classList.remove('selected');
+            }
+          });
+        }
+      }
+
     } catch (err) {
       console.error(err);
       document.getElementById('partner-status-text').innerText = 'Error al cargar';
     }
   }
 
-  // 6. Guardar cambios al hacer clic en "Actualizar Mi Estado"
   async function saveState() {
+    if (!_supabase) {
+      alert("La conexión con Supabase aún no está lista.");
+      return;
+    }
+
     const { error } = await _supabase
       .from('estados')
       .upsert({
@@ -308,9 +356,6 @@
       cargarEstados();
     }
   }
-
-  // Cargar datos al iniciar
-  window.onload = cargarEstados;
 </script>
 
 </body>
