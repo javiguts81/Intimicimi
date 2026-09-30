@@ -275,6 +275,13 @@
         )
         .subscribe();
 
+      // 3. Forzar recarga si se vuelve a abrir o desbloquear la app
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          cargarEstadoInicial();
+        }
+      });
+
     } else {
       document.getElementById('partner-status-text').innerText = 'Error: SDK no cargado';
     }
