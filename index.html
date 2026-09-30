@@ -213,17 +213,14 @@
 </div>
 
 <script>
-  // 1. Configuración de Supabase
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
   let _supabase = null;
 
-  // 2. Identificar al usuario desde la URL (?user=me o ?user=partner)
   const urlParams = new URLSearchParams(window.location.search);
   const miUsuario = urlParams.get('user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
-  // Variables de estado
   let selectedStatus = 'yellow';
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
@@ -252,22 +249,37 @@
     if (el) el.classList.add('selected');
   }
 
-  // 3. Inicialización tras carga completa del SDK
   window.addEventListener('DOMContentLoaded', () => {
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       cargarEstados();
+      activarTiempoReal();
     } else {
       document.getElementById('partner-status-text').innerText = 'Error: SDK no cargado';
     }
   });
 
+  // Escuchar cambios en la base de datos al instante
+  function activarTiempoReal() {
+    _supabase
+      .channel('realtime-estados')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'estados' },
+        (payload) => {
+          if (payload.new && payload.new.id === usuarioPareja) {
+            cargarEstados();
+          }
+        }
+      )
+      .subscribe();
+  }
+
   async function cargarEstados() {
     if (!_supabase) return;
 
     try {
-      // Cargar estado de la PAREJA
-      const { data: pareja, error: errPareja } = await _supabase
+      const { data: pareja } = await _supabase
         .from('estados')
         .select('*')
         .eq('id', usuarioPareja)
@@ -294,7 +306,6 @@
         whatText.innerText = '-';
       }
 
-      // Cargar MI estado anterior para marcar los botones correspondientes
       const { data: miEstado } = await _supabase
         .from('estados')
         .select('*')
