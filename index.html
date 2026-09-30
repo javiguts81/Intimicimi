@@ -175,8 +175,10 @@
             transition: opacity 0.2s;
         }
 
-        .save-btn:disabled {
-            opacity: 0.6;
+        /* Estado bloqueado cuando guarda */
+        button:disabled {
+            opacity: 0.5 !important;
+            cursor: not-allowed !important;
         }
     </style>
 </head>
@@ -233,12 +235,10 @@
 </div>
 
 <script>
-  // Service Worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./OneSignalSDKWorker.js').catch(e => console.log(e));
   }
 
-  // Credenciales Supabase y OneSignal
   const SUPABASE_URL = 'https://rtrrmgedadzlwhzyhxws.supabase.co/';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ0cnJtZ2VkYWR6bHdoenloeHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzM3MDIsImV4cCI6MjEwNTMwOTcwMn0.eBY7sESf2RTHtg3rxCZEWmX8BVEOk-rPhzs_Ed5eDAo';
   
@@ -247,8 +247,8 @@
   const ONESIGNAL_SAFARI_ID = 'web.onesignal.auto.06522562-c4bd-4797-b0b8-e15944eb45af';
 
   let _supabase = null;
+  let isSaving = false;
 
-  // Detección de Usuario
   const urlParams = new URLSearchParams(window.location.search);
   const miUsuario = urlParams.get('user') || 'me';
   const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
@@ -257,16 +257,13 @@
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
-  // Mostrar perfil en pantalla para verificar
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('user-badge').innerText = `Tu Usuario: ${miUsuario.toUpperCase()} (Pareja: ${usuarioPareja.toUpperCase()})`;
     
-    // Inicializar Supabase
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       cargarEstadoInicial();
 
-      // Listener Realtime
       _supabase
         .channel('realtime-partner-status')
         .on(
@@ -282,7 +279,6 @@
     }
   });
 
-  // OneSignal Inicialización pasiva
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(function(OneSignal) {
     OneSignal.init({
@@ -291,10 +287,11 @@
       notifyButton: { enable: false }
     }).then(() => {
       OneSignal.login(miUsuario);
-    });
+    }).catch(err => console.log('OneSignal init err:', err));
   });
 
   function setStatus(color, el) {
+    if (isSaving) return;
     selectedStatus = color;
     document.querySelectorAll('.traffic-btn').forEach(btn => btn.classList.remove('selected'));
     if (el) el.classList.add('selected');
@@ -308,6 +305,7 @@
   }
 
   function selectChoice(type, value, el) {
+    if (isSaving) return;
     if (type === 'when') {
       selectedWhen = value;
       document.querySelectorAll('#when-options .choice-btn').forEach(b => b.classList.remove('selected'));
@@ -352,37 +350,54 @@
     }
   }
 
-  // GUARDADO DIRECTO
-  async function saveState() {
-    const btn = document.getElementById('btn-save');
-    btn.innerText = "Guardando...";
-    btn.disabled = true;
+  function setUIState(saving) {
+    isSaving = saving;
+    const btnSave = document.getElementById('btn-save');
+    const allButtons = document.querySelectorAll('button');
 
-    // 1. Guardar obligatoriamente en Supabase
-    if (_supabase) {
-      const { error } = await _supabase
-        .from('estados')
-        .upsert({
-          id: miUsuario,
-          status: selectedStatus,
-          when: (selectedStatus === 'red') ? '-' : selectedWhen,
-          what: (selectedStatus === 'red') ? '-' : selectedWhat
-        }, { onConflict: 'id' });
+    allButtons.forEach(btn => btn.disabled = saving);
 
-      if (error) {
-        alert("Error de conexión: " + error.message);
-      } else {
-        alert("¡Estado guardado correctamente!");
-      }
+    if (saving) {
+      btnSave.innerText = "Guardando...";
     } else {
-      alert("Error: No hay conexión con la base de datos.");
+      btnSave.innerText = "Actualizar Mi Estado";
     }
+  }
 
-    // 2. Notificación Push asíncrona
-    enviarPushEnSegundoPlano();
+  async function saveState() {
+    if (isSaving) return;
+    setUIState(true);
 
-    btn.innerText = "Actualizar Mi Estado";
-    btn.disabled = false;
+    try {
+      // 1. Guardar en Supabase
+      if (_supabase) {
+        const { error } = await _supabase
+          .from('estados')
+          .upsert({
+            id: miUsuario,
+            status: selectedStatus,
+            when: (selectedStatus === 'red') ? '-' : selectedWhen,
+            what: (selectedStatus === 'red') ? '-' : selectedWhat
+          }, { onConflict: 'id' });
+
+        if (error) {
+          alert("Error de conexión: " + error.message);
+        } else {
+          alert("¡Estado guardado correctamente!");
+        }
+      } else {
+        alert("Error: No hay conexión con la base de datos.");
+      }
+
+      // 2. Notificación Push
+      enviarPushEnSegundoPlano();
+
+    } catch (e) {
+      alert("Error inesperado: " + e.message);
+    } finally {
+      // Garantizar que SIEMPRE se desbloquean los botones y vuelve el texto
+      setUIState(false);
+    }
   }
 
   function enviarPushEnSegundoPlano() {
