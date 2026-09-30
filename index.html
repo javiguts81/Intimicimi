@@ -72,11 +72,23 @@
 
         .user-identity-banner {
             font-size: 0.75rem;
-            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             color: var(--text-muted);
             background: rgba(255, 255, 255, 0.05);
-            padding: 6px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 10px;
+        }
+
+        .switch-btn {
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            color: var(--text-main);
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            cursor: pointer;
         }
 
         .notify-bar {
@@ -212,7 +224,10 @@
         <h1>Conexión Íntima</h1>
     </header>
 
-    <div id="user-display" class="user-identity-banner">Cargando usuario...</div>
+    <div class="user-identity-banner">
+        <span id="user-display">Cargando usuario...</span>
+        <button class="switch-btn" onclick="cambiarUsuarioManual()">Cambiar</button>
+    </div>
 
     <div id="notify-box" class="notify-bar" style="display: none;">
         <span>🔔 Activa notificaciones para avisos</span>
@@ -278,42 +293,28 @@
   let _supabase = null;
   let isSaving = false;
 
-  // Lógica de Identidad Forzada por URL
+  // Lógica de Identidad Prioritaria
   const urlParams = new URLSearchParams(window.location.search);
   const userParam = urlParams.get('user');
 
-  // Si en la URL viene 'partner' o 'me', FORZAMOS la reescritura en el localStorage
   if (userParam === 'partner' || userParam === 'me') {
     localStorage.setItem('intima_user', userParam);
   }
 
-  const miUsuario = localStorage.getItem('intima_user') || 'me';
-  const usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
+  let miUsuario = localStorage.getItem('intima_user') || 'me';
+  let usuarioPareja = (miUsuario === 'me') ? 'partner' : 'me';
 
   let selectedStatus = 'yellow';
   let selectedWhen = 'En un rato';
   let selectedWhat = 'Besos y caricias';
 
   document.addEventListener('DOMContentLoaded', () => {
-    // Mostrar en pantalla qué perfil se está usando
-    document.getElementById('user-display').innerText = `Perfil Activo: ${miUsuario.toUpperCase()}`;
+    actualizarBannerUsuario();
 
     if (window.supabase) {
       _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       cargarEstadoInicial();
-
-      _supabase
-        .channel('realtime-partner-status')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'estados', filter: `id=eq.${usuarioPareja}` },
-          (payload) => {
-            if (payload.new) {
-              actualizarInterfazPareja(payload.new);
-            }
-          }
-        )
-        .subscribe();
+      suscribirRealtime();
     }
 
     if ('Notification' in window && Notification.permission !== 'granted') {
@@ -321,7 +322,33 @@
     }
   });
 
-  // Inicialización de OneSignal con la identidad actual
+  function actualizarBannerUsuario() {
+    document.getElementById('user-display').innerText = `Perfil: ${miUsuario.toUpperCase()}`;
+  }
+
+  function cambiarUsuarioManual() {
+    const nuevoUsuario = miUsuario === 'me' ? 'partner' : 'me';
+    localStorage.setItem('intima_user', nuevoUsuario);
+    location.reload(); // Recarga la app adaptada al nuevo usuario
+  }
+
+  function suscribirRealtime() {
+    if (!_supabase) return;
+    _supabase
+      .channel('realtime-partner-status')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'estados', filter: `id=eq.${usuarioPareja}` },
+        (payload) => {
+          if (payload.new) {
+            actualizarInterfazPareja(payload.new);
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  // Inicialización de OneSignal
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   OneSignalDeferred.push(function(OneSignal) {
     OneSignal.init({
